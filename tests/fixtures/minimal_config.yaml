@@ -1,0 +1,45 @@
+maintenance_mode: false
+dry_run_default: false
+simulation_mode: false
+state_dir: "/tmp/obs-self-heal-test-state"
+
+thruk:
+  script_path: "/tmp/thruk_status.py"
+  python_executable: "python3"
+  critical_threshold: 1
+  down_unhealthy: true
+
+obs:
+  host: "10.0.0.1"
+  port: 4455
+  password: ""
+  timeout_sec: 5.0
+  connect_retries: 0
+  retry_delay_sec: 0.0
+
+scripts:
+  capture_devices_reset: "/tmp/cap.sh"
+  start_stream: "/tmp/start.sh"
+  stop_stream: "/tmp/stop.sh"
+
+reachability:
+  obs_vm:
+    host: "10.0.0.1"
+    ping_count: 0
+    tcp_ports: []
+
+unraid:
+  ssh:
+    host: "10.0.0.2"
+    user: "root"
+  vm:
+    name: "obs"
+
+policy:
+  verify_delay_sec: 0.01
+  max_actions_per_incident: 3
+  allow_vm_restart: false
+
+logging:
+  level: "WARNING"
+  json: false

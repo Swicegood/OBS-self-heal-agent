@@ -1,0 +1,22 @@
+{
+  "public": {
+    "ok": true,
+    "exit_code": 0,
+    "stdout": "keyword hits (rough): CRITICAL=0 WARNING=0 DOWN=1 UNREACHABLE=0",
+    "stderr": "",
+    "critical_count": 0,
+    "down_count": 1
+  },
+  "ws": {
+    "reachable": true,
+    "connect_attempts": 1
+  },
+  "stream": {
+    "output_active": false
+  },
+  "obs_vm": {
+    "host": "10.0.0.1",
+    "ping_ok": true,
+    "tcp_ok": {"4455": true}
+  }
+}

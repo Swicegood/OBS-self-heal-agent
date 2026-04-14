@@ -1,0 +1,95 @@
+# Copy to configs/local.yaml (gitignored) and set real values.
+# Environment override: OBS_SELF_HEAL_CONFIG=/path/to/local.yaml
+
+maintenance_mode: false
+dry_run_default: false
+simulation_mode: false
+
+state_dir: "~/.cache/obs-self-heal/state"
+
+# Thruk / public health — wraps existing OpenClaw skill script (stdlib Thruk client).
+thruk:
+  script_path: "~/.openclaw/workspace/skills/lan-monitoring/scripts/thruk_status.py"
+  python_executable: "python3"
+  env:
+    MONITORING_CREDS_FILE: "~/.openclaw/credentials/monitoring-lan.json"
+  # Aggregate tactical page: treat as unhealthy if any DOWN or CRITICAL beyond threshold.
+  down_unhealthy: true
+  critical_threshold: 1
+  warning_only_is_degraded: false
+  # When enabled, obs-self-heal fetches Thruk TAC in-process (does not call thruk_status.py).
+  # Does not change lan-monitoring scripts.
+  scope:
+    enabled: true
+    # If true: skip keyword-based policy; attach TAC HTML to JSON (`thruk_tac_html_for_agent`)
+    # for an OpenClaw model to interpret (service/host strings below are hints for the agent).
+    delegate_public_to_openclaw: true
+    openclaw_tac_html_max_chars: 120000
+    # Preferred deterministic selectors (Thruk/OMD objects). If set, obs-self-heal fetches
+    # the service detail page (extinfo.cgi type=2) and extracts the Current Status field.
+    host_name: "Mayapur TV"
+    service_name: "Hillsborough Flash Stream"
+    service_substring: "Hillsborough Flash Stream"
+    host_substrings:
+      - "Mayapur TV"
+      - "broadcast1.mayapur.tv"
+    # Used only when delegate_public_to_openclaw is false (deterministic scoped counts).
+    proximity_window_chars: 4500
+
+# OBS WebSocket (remote from WSL2)
+obs:
+  host: "192.168.0.1"
+  port: 4455
+  password: "${OBS_WEBSOCKET_PASSWORD}"
+  timeout_sec: 10.0
+  connect_retries: 2
+  retry_delay_sec: 1.5
+  expected_streaming_when_healthy: true
+
+# Network probes (optional)
+reachability:
+  obs_vm:
+    host: "192.168.0.1"
+    ping_count: 1
+    tcp_ports: [4455]
+  unraid:
+    host: "192.168.0.2"
+    ping_count: 1
+    tcp_ports: [22]
+
+# Remediation scripts — use your real paths; repo includes obs_*.sh examples.
+scripts:
+  capture_devices_reset: "/home/jaga/myopenclaw/obs_reset_capture_devices.sh"
+  start_stream: "/home/jaga/myopenclaw/obs_start_stream.sh"
+  stop_stream: "/home/jaga/myopenclaw/obs_stop_stream.sh"
+  shell_executable: "/bin/bash"
+  timeout_sec: 600
+
+# unRAID / KVM (high impact — isolated)
+unraid:
+  ssh:
+    host: "192.168.0.2"
+    user: "root"
+    identity_file: "~/.ssh/id_unraid"
+    extra_args: []
+  vm:
+    name: "obs-win"
+  virsh:
+    restart_domain_timeout_sec: 120
+
+# Policy
+policy:
+  cooldown_sec:
+    recheck: 30
+    obs_websocket_retry: 15
+    capture_reset: 300
+    stream_stop_start: 120
+    obs_start_stream: 60
+    vm_restart: 900
+  max_actions_per_incident: 3
+  verify_delay_sec: 20
+  allow_vm_restart: false
+
+logging:
+  level: "INFO"
+  json: true

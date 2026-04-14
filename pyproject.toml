@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "obs-self-heal"
+version = "0.1.0"
+description = "OpenClaw-centered self-healing OBS operational toolkit"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+  "pydantic>=2.6",
+  "PyYAML>=6.0",
+  "websocket-client>=1.6",
+  "structlog>=24.1",
+  "eval_type_backport>=0.2.0; python_version < '3.9'",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+]
+
+[project.scripts]
+obs-self-heal = "obs_self_heal.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
