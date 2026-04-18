@@ -30,6 +30,7 @@ class RemediationAction(str, Enum):
     RUN_STOP_STREAM_SCRIPT = "run_stop_stream_script"
     RUN_START_STREAM_SCRIPT = "run_start_stream_script"
     RUN_STOP_THEN_START_STREAM_SCRIPTS = "run_stop_then_start_stream_scripts"
+    RESTART_OBS_VIA_CONTROL_API = "restart_obs_via_control_api"
     RESTART_OBS_VM = "restart_obs_vm"
     ESCALATE_OPERATOR = "escalate_operator"
 

@@ -46,6 +46,14 @@ obs:
   retry_delay_sec: 1.5
   expected_streaming_when_healthy: true
 
+# OBS Control API (second-resort intervention; runs on the Windows OBS host)
+# See `REMOTE_API_GUIDE.md`. This is used when WebSocket is unreachable but the VM is reachable.
+obs_control_api:
+  base_url: "http://192.168.0.1:8765"
+  api_token: "${OBS_CONTROL_API_TOKEN}"
+  timeout_sec: 10.0
+  start_streaming_on_recovery: true
+
 # Network probes (optional)
 reachability:
   obs_vm:
@@ -85,6 +93,7 @@ policy:
     capture_reset: 300
     stream_stop_start: 120
     obs_start_stream: 60
+    obs_control_api_restart: 180
     vm_restart: 900
   max_actions_per_incident: 3
   verify_delay_sec: 20

@@ -1,6 +1,18 @@
 from pathlib import Path
 
-from obs_self_heal.config import AppConfig, ObsConfig, PolicyConfig, ReachHostConfig, ReachabilityConfig, ScriptsConfig, ThrukConfig, UnraidConfig, UnraidSshConfig, UnraidVmConfig
+from obs_self_heal.config import (
+    AppConfig,
+    ObsConfig,
+    ObsControlApiConfig,
+    PolicyConfig,
+    ReachHostConfig,
+    ReachabilityConfig,
+    ScriptsConfig,
+    ThrukConfig,
+    UnraidConfig,
+    UnraidSshConfig,
+    UnraidVmConfig,
+)
 from obs_self_heal.cooldowns import CooldownStore
 from obs_self_heal.models import IncidentClass, ObsStreamState, PublicStreamHealth, ReachabilityResult, RemediationAction
 from obs_self_heal.policy import choose_remediation, classify_incident
@@ -151,3 +163,11 @@ def test_choose_remediation_vm_bad_no_restart(tmp_path: Path) -> None:
     store = CooldownStore(tmp_path / "cd2.json")
     plan = choose_remediation(cfg, IncidentClass.VM_OR_NETWORK_UNHEALTHY, store)
     assert plan.action == RemediationAction.ESCALATE_OPERATOR
+
+
+def test_choose_remediation_ws_unreachable_prefers_control_api_when_configured(tmp_path: Path) -> None:
+    cfg = _minimal_cfg()
+    cfg.obs_control_api = ObsControlApiConfig(base_url="http://10.0.0.9:8765", api_token="t")
+    store = CooldownStore(tmp_path / "cd3.json")
+    plan = choose_remediation(cfg, IncidentClass.OBS_WEBSOCKET_UNREACHABLE_VM_REACHABLE, store)
+    assert plan.action == RemediationAction.RESTART_OBS_VIA_CONTROL_API

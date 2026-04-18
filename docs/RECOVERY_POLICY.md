@@ -8,7 +8,7 @@
 4. Low-impact OBS actions (e.g. start stream via websocket).
 5. **`run_capture_devices_reset()`** when capture/source failure is suspected.
 6. **Controlled stream restart**: `run_stop_stream_script()` → wait → `run_start_stream_script()` and/or OBS API equivalents per config.
-7. Future: Windows-side hook (placeholder interface).
+7. **Second resort: Windows-side OBS Control API** (HTTP) to start/restart OBS when WebSocket is unreachable.
 8. **`restart_obs_vm()`** via SSH to unRAID + `virsh` — only after cooldowns and max lower-impact attempts.
 9. Escalate to operator with full structured log.
 

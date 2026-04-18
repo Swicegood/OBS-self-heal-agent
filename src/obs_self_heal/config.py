@@ -78,6 +78,18 @@ class ObsConfig(BaseModel):
     expected_streaming_when_healthy: bool = True
 
 
+class ObsControlApiConfig(BaseModel):
+    """HTTP control plane on the OBS Windows host (second-resort intervention).
+
+    See REMOTE_API_GUIDE.md.
+    """
+
+    base_url: str
+    api_token: str
+    timeout_sec: float = 10.0
+    start_streaming_on_recovery: bool = True
+
+
 class ReachHostConfig(BaseModel):
     host: str
     ping_count: int = 1
@@ -124,6 +136,7 @@ class PolicyCooldownConfig(BaseModel):
     capture_reset: int = 300
     stream_stop_start: int = 120
     obs_start_stream: int = 60
+    obs_control_api_restart: int = 180
     vm_restart: int = 900
 
 
@@ -150,6 +163,7 @@ class AppConfig(BaseModel):
 
     thruk: ThrukConfig
     obs: ObsConfig
+    obs_control_api: ObsControlApiConfig | None = None
     reachability: ReachabilityConfig = Field(default_factory=ReachabilityConfig)
     scripts: ScriptsConfig
     unraid: UnraidConfig

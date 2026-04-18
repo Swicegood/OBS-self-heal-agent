@@ -1,6 +1,7 @@
 # Local secrets and overrides (never commit)
 configs/local.yaml
 configs/*.local.yaml
+configs/*.json
 .env
 .env.*
 *.pem

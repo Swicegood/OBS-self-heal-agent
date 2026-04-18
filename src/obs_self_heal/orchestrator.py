@@ -22,6 +22,7 @@ from obs_self_heal.policy import (
     verify_recovery,
 )
 from obs_self_heal.wrappers import obs as obs_wrapper
+from obs_self_heal.wrappers import obs_control_api as obs_control_api_wrapper
 from obs_self_heal.wrappers import reachability as reach
 from obs_self_heal.wrappers import thruk as thruk_wrapper
 
@@ -48,6 +49,12 @@ def default_collect_signals(cfg: AppConfig) -> SignalSnapshot:
     stream = obs_wrapper.get_obs_stream_state(cfg) if ws.reachable else ObsStreamState(output_active=None, error="ws_unreachable")
     obs_vm = reach.check_obs_vm_reachability(cfg)
     unraid = reach.check_unraid_reachability(cfg)
+    # Optional evidence only (does not drive classification directly).
+    try:
+        if cfg.obs_control_api is not None:
+            _ = obs_control_api_wrapper.get_control_api_status(cfg)
+    except Exception:
+        pass
     return SignalSnapshot(public=public, ws=ws, stream=stream, obs_vm=obs_vm, unraid=unraid)
 
 

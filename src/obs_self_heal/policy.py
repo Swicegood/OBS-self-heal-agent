@@ -15,6 +15,7 @@ from obs_self_heal.models import (
     ScriptRunResult,
 )
 from obs_self_heal.wrappers import obs as obs_wrapper
+from obs_self_heal.wrappers import obs_control_api as obs_control_api_wrapper
 from obs_self_heal.wrappers import scripts as scripts_wrapper
 from obs_self_heal.wrappers import unraid as unraid_wrapper
 
@@ -156,6 +157,13 @@ def choose_remediation(
         return RemediationPlan(RemediationAction.RECHECK_ONLY, "cooldown_capture_and_restart", "recheck")
 
     if incident_class == IncidentClass.OBS_WEBSOCKET_UNREACHABLE_VM_REACHABLE:
+        key_api = "obs_control_api_restart"
+        if cfg.obs_control_api is not None and cooldowns.allowed(key_api, float(cd.obs_control_api_restart)):
+            return RemediationPlan(
+                RemediationAction.RESTART_OBS_VIA_CONTROL_API,
+                "ws_unreachable_try_windows_side_control_api",
+                key_api,
+            )
         key = "stream_stop_start"
         if cooldowns.allowed(key, float(cd.stream_stop_start)):
             return RemediationPlan(
@@ -163,7 +171,7 @@ def choose_remediation(
                 "ws_unreachable_try_script_based_obs_cli",
                 key,
             )
-        return RemediationPlan(RemediationAction.ESCALATE_OPERATOR, "cooldown_stream_toggle", "escalate")
+        return RemediationPlan(RemediationAction.ESCALATE_OPERATOR, "cooldown_control_api_and_stream_toggle", "escalate")
 
     if incident_class == IncidentClass.VM_OR_NETWORK_UNHEALTHY:
         key = "vm_restart"
@@ -203,6 +211,9 @@ def execute_remediation(
         cooldowns.touch("obs_start_stream")
     elif action == RemediationAction.OBS_STOP_STREAM_WEBSOCKET:
         result = obs_wrapper.stop_stream_websocket(cfg)
+    elif action == RemediationAction.RESTART_OBS_VIA_CONTROL_API:
+        result = obs_control_api_wrapper.restart_obs_via_control_api(cfg)
+        cooldowns.touch("obs_control_api_restart")
     elif action == RemediationAction.RUN_CAPTURE_DEVICES_RESET:
         result = scripts_wrapper.run_capture_devices_reset(cfg)
         cooldowns.touch("capture_reset")
