@@ -27,26 +27,52 @@ def check_obs_websocket(cfg: AppConfig) -> ObsWebsocketHealth:
     return ObsWebsocketHealth(reachable=False, error=last_err, connect_attempts=attempts, elapsed_sec=elapsed)
 
 
+def _stream_state_from_open_ws(ws: ObsWebSocketV5) -> ObsStreamState:
+    st = ws.request("GetStreamStatus")
+    active = bool(st.get("outputActive")) if isinstance(st, dict) else None
+    out_bytes = int(st["outputBytes"]) if isinstance(st, dict) and st.get("outputBytes") is not None else None
+    dur = int(st["outputDuration"]) if isinstance(st, dict) and st.get("outputDuration") is not None else None
+    scene = None
+    try:
+        cur = ws.request("GetCurrentProgramScene")
+        if isinstance(cur, dict):
+            scene = cur.get("currentProgramSceneName") or cur.get("sceneName")
+    except Exception:  # noqa: BLE001
+        scene = None
+    return ObsStreamState(
+        output_active=active,
+        output_bytes=out_bytes,
+        output_duration_ms=dur,
+        current_program_scene=scene,
+    )
+
+
+def collect_ws_and_stream(cfg: AppConfig) -> tuple[ObsWebsocketHealth, ObsStreamState]:
+    """Use one WebSocket session for reachability + stream state (fewer connects per cycle)."""
+
+    last_err: str | None = None
+    attempts = 0
+    start = time.perf_counter()
+    for i in range(cfg.obs.connect_retries + 1):
+        attempts += 1
+        try:
+            with ObsWebSocketV5(cfg.obs) as ws:
+                stream = _stream_state_from_open_ws(ws)
+                elapsed = time.perf_counter() - start
+                return ObsWebsocketHealth(reachable=True, connect_attempts=attempts, elapsed_sec=elapsed), stream
+        except Exception as e:  # noqa: BLE001
+            last_err = f"{type(e).__name__}: {e}"
+            if i < cfg.obs.connect_retries:
+                time.sleep(cfg.obs.retry_delay_sec)
+    elapsed = time.perf_counter() - start
+    dead = ObsStreamState(output_active=None, error=last_err)
+    return ObsWebsocketHealth(reachable=False, error=last_err, connect_attempts=attempts, elapsed_sec=elapsed), dead
+
+
 def get_obs_stream_state(cfg: AppConfig) -> ObsStreamState:
     try:
         with ObsWebSocketV5(cfg.obs) as ws:
-            st = ws.request("GetStreamStatus")
-            active = bool(st.get("outputActive")) if isinstance(st, dict) else None
-            out_bytes = int(st["outputBytes"]) if st.get("outputBytes") is not None else None
-            dur = int(st["outputDuration"]) if st.get("outputDuration") is not None else None
-            scene = None
-            try:
-                cur = ws.request("GetCurrentProgramScene")
-                if isinstance(cur, dict):
-                    scene = cur.get("currentProgramSceneName") or cur.get("sceneName")
-            except Exception:  # noqa: BLE001
-                scene = None
-            return ObsStreamState(
-                output_active=active,
-                output_bytes=out_bytes,
-                output_duration_ms=dur,
-                current_program_scene=scene,
-            )
+            return _stream_state_from_open_ws(ws)
     except Exception as e:  # noqa: BLE001
         return ObsStreamState(output_active=None, error=str(e))
 
@@ -82,8 +108,30 @@ def start_stream_websocket(cfg: AppConfig) -> ScriptRunResult:
     try:
         with ObsWebSocketV5(cfg.obs) as ws:
             ws.request("StartStream")
-        elapsed = time.perf_counter() - start
-        return _script_result("obs_start_stream_ws", 0, "OK", "", elapsed, cmd)
+            last = _stream_state_from_open_ws(ws)
+            attempts = cfg.obs.stream_start_verify_attempts
+            interval = cfg.obs.stream_start_verify_interval_sec
+            for i in range(attempts):
+                if last.output_active is True:
+                    elapsed = time.perf_counter() - start
+                    return _script_result(
+                        "obs_start_stream_ws",
+                        0,
+                        f"OK outputActive=true after_poll={i + 1}",
+                        "",
+                        elapsed,
+                        cmd,
+                    )
+                if i + 1 < attempts:
+                    time.sleep(interval)
+                    last = _stream_state_from_open_ws(ws)
+            elapsed = time.perf_counter() - start
+            detail = (
+                f"StartStream request succeeded but output never became active after "
+                f"{attempts} GetStreamStatus polls "
+                f"(last output_active={last.output_active!r} scene={last.current_program_scene!r})"
+            )
+            return _script_result("obs_start_stream_ws", 1, "", detail, elapsed, cmd)
     except Exception as e:  # noqa: BLE001
         elapsed = time.perf_counter() - start
         return _script_result("obs_start_stream_ws", 1, "", str(e), elapsed, cmd)

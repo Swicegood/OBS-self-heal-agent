@@ -76,6 +76,9 @@ class ObsConfig(BaseModel):
     connect_retries: int = 2
     retry_delay_sec: float = 1.5
     expected_streaming_when_healthy: bool = True
+    # StartStream can return OK before encoding/output is active; poll GetStreamStatus on the same session.
+    stream_start_verify_attempts: int = 20
+    stream_start_verify_interval_sec: float = 1.0
 
 
 class ObsControlApiConfig(BaseModel):

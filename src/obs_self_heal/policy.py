@@ -220,8 +220,9 @@ def execute_remediation(
 
     if action == RemediationAction.OBS_START_STREAM_WEBSOCKET:
         result = obs_wrapper.start_stream_websocket(cfg)
-        cooldowns.touch("obs_start_stream")
-        cooldowns.touch("public_recover_grace")
+        if result.exit_code == 0:
+            cooldowns.touch("obs_start_stream")
+            cooldowns.touch("public_recover_grace")
     elif action == RemediationAction.OBS_STOP_STREAM_WEBSOCKET:
         result = obs_wrapper.stop_stream_websocket(cfg)
     elif action == RemediationAction.RESTART_OBS_VIA_CONTROL_API:
@@ -232,8 +233,9 @@ def execute_remediation(
         cooldowns.touch("capture_reset")
     elif action == RemediationAction.RUN_START_STREAM_SCRIPT:
         result = scripts_wrapper.run_start_stream_script(cfg)
-        cooldowns.touch("obs_start_stream")
-        cooldowns.touch("public_recover_grace")
+        if result.exit_code == 0:
+            cooldowns.touch("obs_start_stream")
+            cooldowns.touch("public_recover_grace")
     elif action == RemediationAction.RUN_STOP_STREAM_SCRIPT:
         result = scripts_wrapper.run_stop_stream_script(cfg)
     elif action == RemediationAction.RUN_STOP_THEN_START_STREAM_SCRIPTS:
@@ -247,8 +249,9 @@ def execute_remediation(
             elapsed_sec=r1.elapsed_sec + r2.elapsed_sec,
             command=r1.command + r2.command,
         )
-        cooldowns.touch("stream_stop_start")
-        cooldowns.touch("public_recover_grace")
+        if result.exit_code == 0:
+            cooldowns.touch("stream_stop_start")
+            cooldowns.touch("public_recover_grace")
     elif action == RemediationAction.RESTART_OBS_VM:
         result = unraid_wrapper.restart_obs_vm(cfg)
         cooldowns.touch("vm_restart")

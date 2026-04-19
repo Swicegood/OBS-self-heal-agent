@@ -7,7 +7,7 @@ import json
 import sys
 from typing import Any, Mapping
 
-from obs_self_heal.config import load_config
+from obs_self_heal.config import load_config, state_file_path
 from obs_self_heal.models import (
     IncidentClass,
     ObsStreamState,
@@ -92,6 +92,19 @@ def _cmd_run(config_path: str, *, dry_run: bool | None) -> int:
     return 0
 
 
+def _cmd_reset_cooldowns(config_path: str) -> int:
+    """Remove persisted cooldown timestamps so the next `run` can remediate immediately."""
+
+    cfg = load_config(config_path)
+    path = state_file_path(cfg)
+    if path.exists():
+        path.unlink()
+        print(f"obs-self-heal: cleared cooldown state {path}", file=sys.stderr)
+    else:
+        print(f"obs-self-heal: no cooldown state at {path}", file=sys.stderr)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="obs-self-heal")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -103,12 +116,20 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--config", required=True, help="Path to YAML config.")
     p_run.add_argument("--dry-run", action="store_true", help="Force dry-run for this invocation.")
 
+    p_rc = sub.add_parser(
+        "reset-cooldowns",
+        help="Delete cooldown timestamps (testing: next run is not blocked by prior actions).",
+    )
+    p_rc.add_argument("--config", required=True, help="Path to YAML config.")
+
     args = parser.parse_args(argv)
     try:
         if args.command == "probe":
             return _cmd_probe(args.config)
         if args.command == "run":
             return _cmd_run(args.config, dry_run=True if args.dry_run else None)
+        if args.command == "reset-cooldowns":
+            return _cmd_reset_cooldowns(args.config)
     except OSError as e:
         print(f"obs-self-heal: {e}", file=sys.stderr)
         return 2

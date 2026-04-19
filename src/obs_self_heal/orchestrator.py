@@ -45,8 +45,7 @@ SignalCollector = Callable[[AppConfig], SignalSnapshot]
 
 def default_collect_signals(cfg: AppConfig) -> SignalSnapshot:
     public = thruk_wrapper.check_public_stream_health(cfg)
-    ws = obs_wrapper.check_obs_websocket(cfg)
-    stream = obs_wrapper.get_obs_stream_state(cfg) if ws.reachable else ObsStreamState(output_active=None, error="ws_unreachable")
+    ws, stream = obs_wrapper.collect_ws_and_stream(cfg)
     obs_vm = reach.check_obs_vm_reachability(cfg)
     unraid = reach.check_unraid_reachability(cfg)
     # Optional evidence only (does not drive classification directly).
