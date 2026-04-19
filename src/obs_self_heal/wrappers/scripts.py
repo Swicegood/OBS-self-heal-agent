@@ -13,6 +13,7 @@ def _run_script(cfg: AppConfig, path: str, name: str) -> ScriptRunResult:
     script = Path(path).expanduser()
     cmd = [cfg.scripts.shell_executable, str(script)]
     env = dict(os.environ)
+    env.update(cfg.scripts.env or {})
     start = time.perf_counter()
     proc = subprocess.run(
         cmd,

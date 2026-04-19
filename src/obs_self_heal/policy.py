@@ -136,15 +136,27 @@ def choose_remediation(
             return RemediationPlan(action, "public_down_and_obs_not_streaming", key)
         return RemediationPlan(RemediationAction.RECHECK_ONLY, "cooldown_obs_start_stream", "recheck")
 
-    if incident_class in (
-        IncidentClass.PUBLIC_DOWN_OBS_REACHABLE_STREAM_ACTIVE,
-        IncidentClass.DEGRADED_SUSPECTED_CAPTURE,
-    ):
+    if incident_class == IncidentClass.PUBLIC_DOWN_OBS_REACHABLE_STREAM_ACTIVE:
+        # Public monitoring can lag substantially after OBS reports streaming active.
+        grace_key = "public_recover_grace"
+        if not cooldowns.allowed(grace_key, float(cd.public_recover_grace)):
+            return RemediationPlan(RemediationAction.RECHECK_ONLY, "public_monitoring_lag_grace", "recheck")
+
+        key2 = "stream_stop_start"
+        if cooldowns.allowed(key2, float(cd.stream_stop_start)):
+            return RemediationPlan(
+                RemediationAction.RUN_STOP_THEN_START_STREAM_SCRIPTS,
+                "public_down_but_obs_streaming_waited_grace_try_controlled_restart",
+                key2,
+            )
+        return RemediationPlan(RemediationAction.RECHECK_ONLY, "cooldown_restart_after_grace", "recheck")
+
+    if incident_class == IncidentClass.DEGRADED_SUSPECTED_CAPTURE:
         key = "capture_reset"
         if cooldowns.allowed(key, float(cd.capture_reset)):
             return RemediationPlan(
                 RemediationAction.RUN_CAPTURE_DEVICES_RESET,
-                "public_down_but_obs_streaming_or_capture_suspected",
+                "degraded_capture_suspected",
                 key,
             )
         key2 = "stream_stop_start"
@@ -209,6 +221,7 @@ def execute_remediation(
     if action == RemediationAction.OBS_START_STREAM_WEBSOCKET:
         result = obs_wrapper.start_stream_websocket(cfg)
         cooldowns.touch("obs_start_stream")
+        cooldowns.touch("public_recover_grace")
     elif action == RemediationAction.OBS_STOP_STREAM_WEBSOCKET:
         result = obs_wrapper.stop_stream_websocket(cfg)
     elif action == RemediationAction.RESTART_OBS_VIA_CONTROL_API:
@@ -220,6 +233,7 @@ def execute_remediation(
     elif action == RemediationAction.RUN_START_STREAM_SCRIPT:
         result = scripts_wrapper.run_start_stream_script(cfg)
         cooldowns.touch("obs_start_stream")
+        cooldowns.touch("public_recover_grace")
     elif action == RemediationAction.RUN_STOP_STREAM_SCRIPT:
         result = scripts_wrapper.run_stop_stream_script(cfg)
     elif action == RemediationAction.RUN_STOP_THEN_START_STREAM_SCRIPTS:
@@ -234,6 +248,7 @@ def execute_remediation(
             command=r1.command + r2.command,
         )
         cooldowns.touch("stream_stop_start")
+        cooldowns.touch("public_recover_grace")
     elif action == RemediationAction.RESTART_OBS_VM:
         result = unraid_wrapper.restart_obs_vm(cfg)
         cooldowns.touch("vm_restart")

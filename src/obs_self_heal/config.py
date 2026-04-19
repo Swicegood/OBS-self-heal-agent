@@ -105,6 +105,7 @@ class ScriptsConfig(BaseModel):
     capture_devices_reset: str
     start_stream: str
     stop_stream: str
+    env: dict[str, str] = Field(default_factory=dict)
     shell_executable: str = "/bin/bash"
     timeout_sec: float = 600.0
 
@@ -136,6 +137,9 @@ class PolicyCooldownConfig(BaseModel):
     capture_reset: int = 300
     stream_stop_start: int = 120
     obs_start_stream: int = 60
+    # After stream start succeeds, public monitoring may lag by minutes.
+    # While within this grace window, avoid heavy actions (capture reset, restarts) and recheck only.
+    public_recover_grace: int = 600
     obs_control_api_restart: int = 180
     vm_restart: int = 900
 
