@@ -14,7 +14,7 @@ from obs_self_heal.policy import (
     execute_remediation,
     verify_recovery,
 )
-from obs_self_heal.wrappers.obs import check_obs_websocket, get_obs_stats, get_obs_stream_state
+from obs_self_heal.wrappers.obs import check_obs_websocket, collect_ws_and_stream, get_obs_stats, get_obs_stream_state
 from obs_self_heal.wrappers.reachability import check_obs_vm_reachability, check_unraid_reachability
 from obs_self_heal.wrappers.scripts import (
     run_capture_devices_reset,
@@ -27,6 +27,7 @@ from obs_self_heal.wrappers.unraid import check_vm_state, restart_obs_vm, verify
 __all__ = [
     "check_public_stream_health",
     "check_obs_websocket",
+    "collect_ws_and_stream",
     "get_obs_stream_state",
     "get_obs_stats",
     "check_obs_vm_reachability",

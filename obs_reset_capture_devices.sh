@@ -39,6 +39,14 @@ VIDEO_ITEM="SDI Capture Device"
 AUDIO_ITEM="Audio Input Capture 2"
 PCI_DEV="0000:07:00.0"
 
+VM_HOST_SSH_HOST="${VM_HOST_SSH_HOST:-"192.168.0.71"}"
+VM_HOST_SSH_PORT="${VM_HOST_SSH_PORT:-"22"}"
+VM_HOST_SSH_USER="${VM_HOST_SSH_USER:-"root"}"
+
+vm_host() {
+  ssh -p "$VM_HOST_SSH_PORT" "${VM_HOST_SSH_USER}@${VM_HOST_SSH_HOST}" "$@"
+}
+
 obs() {
   docker run --rm jagadguru/obs-cli:latest \
     -H "$OBS_HOST" -P "$OBS_PORT" -p "$OBS_PASS" "$@"
@@ -51,7 +59,7 @@ obs item hide -s "$SCENE" "$AUDIO_ITEM" || true
 sleep 1
 
 echo "2) Reset PCI USB controller ($PCI_DEV)..."
-echo 1 > "/sys/bus/pci/devices/$PCI_DEV/reset"
+vm_host sh -lc "echo 1 > '/sys/bus/pci/devices/$PCI_DEV/reset'"
 
 # IMPORTANT: let Windows fully re-enumerate the USB bus + DirectShow device
 # This is the main difference from the earlier integrated attempt.

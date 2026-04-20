@@ -6,6 +6,31 @@ This repository implements the `**obs-self-heal**` Python package.
 
 OpenClaw remains the orchestrator: schedule or invoke the CLI from a skill, pass credential paths via environment, and forward structured logs to your usual log sink.
 
+## Loading this skill from the Git repo (no symlink)
+
+OpenClaw rejects workspace skill paths that symlink outside the workspace. Instead of copying or linking `skills/obs-self-heal` into `~/.openclaw/workspace/skills/`, add **`skills.load.extraDirs`** in `~/.openclaw/openclaw.json` pointing at this repository’s skill directory:
+
+```json
+"skills": {
+  "load": {
+    "extraDirs": [
+      "/home/jaga/myopenclaw/skills/obs-self-heal"
+    ]
+  }
+}
+```
+
+Restart the OpenClaw gateway after changing config. Prefer editing **`~/myopenclaw/skills/obs-self-heal`** as the single source of truth; remove duplicate `obs-self-heal` copies under `~/.openclaw/workspace/skills/` once you confirm the gateway lists the repo path (avoids two copies of the same skill).
+
+## Cron (`cron-on-probe-fail.sh`) → OpenClaw agent
+
+When `obs-self-heal probe` fails, the script can invoke **`openclaw agent`** with **`/skill obs-self-heal`** plus the **`payload.text`** for a named job in **`~/.openclaw/cron/jobs.json`**:
+
+- Set **`OPENCLAW_CRON_JOB_NAME`** (e.g. `OBS Check and Heal`) on the cron line.
+- Optionally set **`OPENCLAW_JOBS_JSON`**, **`OPENCLAW_AGENT_ID`**, **`OPENCLAW_REPLY_*`** for Telegram delivery.
+
+If **`OPENCLAW_ON_PROBE_FAIL`** is set, it runs **instead** (direct remediation without the agent).
+
 ## Suggested invocation
 
 From WSL2 (after `pip install -e .` or a venv):
