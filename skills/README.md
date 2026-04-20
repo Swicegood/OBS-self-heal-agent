@@ -22,6 +22,15 @@ OpenClaw rejects workspace skill paths that symlink outside the workspace. Inste
 
 Restart the OpenClaw gateway after changing config. Prefer editing **`~/myopenclaw/skills/obs-self-heal`** as the single source of truth; remove duplicate `obs-self-heal` copies under `~/.openclaw/workspace/skills/` once you confirm the gateway lists the repo path (avoids two copies of the same skill).
 
+## Cron (`cron-on-probe-fail.sh`) → OpenClaw agent
+
+When `obs-self-heal probe` fails, the script can invoke **`openclaw agent`** with **`/skill obs-self-heal`** plus the **`payload.text`** for a named job in **`~/.openclaw/cron/jobs.json`**:
+
+- Set **`OPENCLAW_CRON_JOB_NAME`** (e.g. `OBS Check and Heal`) on the cron line.
+- Optionally set **`OPENCLAW_JOBS_JSON`**, **`OPENCLAW_AGENT_ID`**, **`OPENCLAW_REPLY_*`** for Telegram delivery.
+
+If **`OPENCLAW_ON_PROBE_FAIL`** is set, it runs **instead** (direct remediation without the agent).
+
 ## Suggested invocation
 
 From WSL2 (after `pip install -e .` or a venv):
