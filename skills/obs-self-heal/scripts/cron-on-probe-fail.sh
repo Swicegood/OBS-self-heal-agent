@@ -47,6 +47,35 @@ if [[ "$BIN" == */* ]] && [[ ! -x "$BIN" ]]; then
   exit 2
 fi
 
+_load_obs_control_api_token() {
+  # Avoid putting secrets directly in crontab env. If OBS_CONTROL_API_TOKEN is not already set,
+  # read it from the repo config JSON (git-tracked by you).
+  if [[ -n "${OBS_CONTROL_API_TOKEN:-}" ]]; then
+    return 0
+  fi
+
+  local config_dir repo token_path
+  config_dir="$(cd "$(dirname "$CONFIG")" && pwd)"
+  repo="$(dirname "$config_dir")"
+  token_path="${OBS_CONTROL_API_TOKEN_JSON:-$repo/configs/config.obs_api.json}"
+
+  if [[ ! -f "$token_path" ]]; then
+    return 0
+  fi
+
+  # No token printing: just export into this process environment.
+  OBS_CONTROL_API_TOKEN="$(
+    python3 - "$token_path" <<'PY'
+import json, sys
+path = sys.argv[1]
+data = json.load(open(path, encoding="utf-8"))
+sys.stdout.write(str(data.get("api_token", "") or ""))
+PY
+  )" || OBS_CONTROL_API_TOKEN=""
+
+  export OBS_CONTROL_API_TOKEN
+}
+
 _run_openclaw_from_cron_payload() {
   local job_name="$1"
 
@@ -122,6 +151,8 @@ if [[ -n "${OPENCLAW_ON_PROBE_FAIL:-}" || -n "${OPENCLAW_CRON_JOB_NAME:-}" ]]; t
     exit 0
   fi
 fi
+
+_load_obs_control_api_token
 
 if [[ -n "${OPENCLAW_ON_PROBE_FAIL:-}" ]]; then
   bash -c "$OPENCLAW_ON_PROBE_FAIL"

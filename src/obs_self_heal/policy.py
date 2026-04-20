@@ -170,12 +170,16 @@ def choose_remediation(
 
     if incident_class == IncidentClass.OBS_WEBSOCKET_UNREACHABLE_VM_REACHABLE:
         key_api = "obs_control_api_restart"
-        if cfg.obs_control_api is not None and cooldowns.allowed(key_api, float(cd.obs_control_api_restart)):
-            return RemediationPlan(
-                RemediationAction.RESTART_OBS_VIA_CONTROL_API,
-                "ws_unreachable_try_windows_side_control_api",
-                key_api,
-            )
+        if cfg.obs_control_api is not None:
+            # Prefer the Windows-host control API when websocket is down; script-based toggles typically
+            # also depend on websocket and can hang/thrash when OBS isn't running.
+            if cooldowns.allowed(key_api, float(cd.obs_control_api_restart)):
+                return RemediationPlan(
+                    RemediationAction.RESTART_OBS_VIA_CONTROL_API,
+                    "ws_unreachable_try_windows_side_control_api",
+                    key_api,
+                )
+            return RemediationPlan(RemediationAction.RECHECK_ONLY, "cooldown_obs_control_api_restart", "recheck")
         key = "stream_stop_start"
         if cooldowns.allowed(key, float(cd.stream_stop_start)):
             return RemediationPlan(
