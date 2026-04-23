@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 
 from obs_self_heal.config import AppConfig, ReachHostConfig
-from obs_self_heal.models import ReachabilityResult
+from obs_self_heal.models import ReachabilityResult, ScriptRunResult
 
 
 def _tcp_probe(host: str, port: int, timeout: float = 3.0) -> bool:

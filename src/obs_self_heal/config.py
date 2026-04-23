@@ -56,6 +56,8 @@ class ThrukScopeConfig(BaseModel):
     # Skip deterministic keyword policy; attach TAC HTML for an OpenClaw agent to interpret.
     delegate_public_to_openclaw: bool = False
     openclaw_tac_html_max_chars: int = 120_000
+    # Timeout per HTTP fetch in the scoped checker (login/status/extinfo/tac).
+    request_timeout_sec: float = 20.0
 
 
 class ThrukConfig(BaseModel):
@@ -66,6 +68,8 @@ class ThrukConfig(BaseModel):
     critical_threshold: int = 1
     warning_only_is_degraded: bool = False
     scope: ThrukScopeConfig | None = None
+    # Timeout for running `thruk_status.py` when scope is disabled.
+    script_timeout_sec: float = 30.0
 
 
 class ObsConfig(BaseModel):

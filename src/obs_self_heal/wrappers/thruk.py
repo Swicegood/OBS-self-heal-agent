@@ -46,7 +46,7 @@ def check_public_stream_health(cfg: AppConfig) -> PublicStreamHealth:
         cmd,
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=float(cfg.thruk.script_timeout_sec),
         env=env,
         check=False,
     )

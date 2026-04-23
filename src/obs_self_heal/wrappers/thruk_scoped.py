@@ -190,6 +190,7 @@ def _fetch(
     opener: urllib.request.OpenerDirector,
     url: str,
     data: dict[str, str] | None = None,
+    timeout_sec: float = 60.0,
 ) -> tuple[int, str]:
     if data:
         body = urllib.parse.urlencode(data).encode("utf-8")
@@ -197,7 +198,7 @@ def _fetch(
     else:
         req = urllib.request.Request(url)
     try:
-        with opener.open(req, timeout=60) as resp:
+        with opener.open(req, timeout=float(timeout_sec)) as resp:
             return resp.getcode(), resp.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as e:
         raw = e.read().decode("utf-8", errors="replace") if e.fp else ""
@@ -267,15 +268,16 @@ def check_public_stream_health_scoped(cfg: AppConfig) -> PublicStreamHealth:
     opener = _build_opener()
     base = creds["baseUrl"]
     login_url = f"{base}/thruk/cgi-bin/login.cgi"
+    timeout_sec = float(scope.request_timeout_sec)
 
     try:
-        _fetch(opener, login_url, None)
+        _fetch(opener, login_url, None, timeout_sec=timeout_sec)
         post = {
             "login": creds["login"],
             "password": creds["password"],
             "submit": "Login",
         }
-        code, body = _fetch(opener, login_url, post)
+        code, body = _fetch(opener, login_url, post, timeout_sec=timeout_sec)
         if code not in (200, 302):
             err_out = body[:800]
             elapsed = time.perf_counter() - start
@@ -291,7 +293,7 @@ def check_public_stream_health_scoped(cfg: AppConfig) -> PublicStreamHealth:
         # Preferred deterministic path: fetch the service detail page directly.
         if scope.host_name.strip() and scope.service_name.strip():
             url = _build_service_detail_url(base, scope.host_name.strip(), scope.service_name.strip())
-            code_s, html_s = _fetch(opener, url)
+            code_s, html_s = _fetch(opener, url, timeout_sec=timeout_sec)
             if code_s != 200:
                 elapsed = time.perf_counter() - start
                 # Thruk often returns 404 with a useful error page; treat as object-not-found when it says so.
@@ -319,7 +321,7 @@ def check_public_stream_health_scoped(cfg: AppConfig) -> PublicStreamHealth:
                 # Fallback: status.cgi host view, then find the service line.
                 if perr == "scoped_object_not_found":
                     url2 = _build_host_status_url(base, scope.host_name.strip())
-                    code_h, html_h = _fetch(opener, url2)
+                    code_h, html_h = _fetch(opener, url2, timeout_sec=timeout_sec)
                     if code_h == 200:
                         st2, err2 = _extract_service_status_from_status_html(html_h, scope.service_name.strip())
                         if err2 is None and st2:
@@ -337,7 +339,7 @@ def check_public_stream_health_scoped(cfg: AppConfig) -> PublicStreamHealth:
             return _service_health_from_status(status, stdout=summary, elapsed=elapsed)
 
         tac_url = f"{base}/thruk/cgi-bin/tac.cgi"
-        code2, html = _fetch(opener, tac_url)
+        code2, html = _fetch(opener, tac_url, timeout_sec=timeout_sec)
         if code2 != 200:
             elapsed = time.perf_counter() - start
             return PublicStreamHealth(
