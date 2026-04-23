@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import shlex
+import time
 
 from obs_self_heal.config import AppConfig
 from obs_self_heal.models import ScriptRunResult, VmState
@@ -25,12 +26,37 @@ def check_vm_state(cfg: AppConfig) -> VmState:
 
 def restart_obs_vm(cfg: AppConfig) -> ScriptRunResult:
     """
-    Hard reset path: `virsh reset` or `destroy` + `start` depending on policy.
-    MVP uses `virsh reset <domain>` — still high impact; must be gated by policy + cooldown.
+    Power-cycle the domain: `virsh destroy` + `virsh start`.
+
+    `virsh reset` is not sufficient for some stuck states (e.g., paused), while destroy/start
+    consistently forces a state transition. This is high impact and must be gated by policy + cooldown.
     """
 
     vm = shlex.quote(cfg.unraid.vm.name)
-    return run_remote_command(cfg, f"virsh reset {vm}", timeout_sec=cfg.unraid.virsh.restart_domain_timeout_sec)
+    timeout = float(cfg.unraid.virsh.restart_domain_timeout_sec)
+    start = time.perf_counter()
+
+    destroy = run_remote_command(cfg, f"virsh destroy {vm}", timeout_sec=timeout)
+    # If destroy fails because it's already off, we still try start.
+    start_res = run_remote_command(cfg, f"virsh start {vm}", timeout_sec=max(1.0, timeout - (time.perf_counter() - start)))
+
+    exit_code = 0 if (destroy.exit_code in (0, 1) and start_res.exit_code == 0) else (start_res.exit_code or destroy.exit_code)
+    stdout = (destroy.stdout or "") + ("" if not destroy.stdout or destroy.stdout.endswith("\n") else "\n") + (start_res.stdout or "")
+    stderr = (destroy.stderr or "") + ("" if not destroy.stderr or destroy.stderr.endswith("\n") else "\n") + (start_res.stderr or "")
+    elapsed = time.perf_counter() - start
+
+    return ScriptRunResult(
+        name="ssh_remote_destroy_then_start",
+        exit_code=exit_code,
+        stdout=stdout,
+        stderr=stderr,
+        elapsed_sec=elapsed,
+        command=[
+            "ssh_remote",
+            f"virsh destroy {vm}",
+            f"virsh start {vm}",
+        ],
+    )
 
 
 def verify_vm_recovered(cfg: AppConfig) -> VmState:
