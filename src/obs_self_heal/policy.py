@@ -191,9 +191,11 @@ def choose_remediation(
 
     if incident_class == IncidentClass.VM_OR_NETWORK_UNHEALTHY:
         key = "vm_restart"
-        if cfg.policy.allow_vm_restart and cooldowns.allowed(key, float(cd.vm_restart)):
+        if not cfg.policy.allow_vm_restart:
+            return RemediationPlan(RemediationAction.ESCALATE_OPERATOR, "vm_unhealthy_vm_restart_disabled", "escalate")
+        if cooldowns.allowed(key, float(cd.vm_restart)):
             return RemediationPlan(RemediationAction.RESTART_OBS_VM, "vm_or_network_unhealthy", key)
-        return RemediationPlan(RemediationAction.ESCALATE_OPERATOR, "vm_unhealthy_vm_restart_disabled", "escalate")
+        return RemediationPlan(RemediationAction.ESCALATE_OPERATOR, "vm_unhealthy_vm_restart_on_cooldown", "escalate")
 
     return RemediationPlan(RemediationAction.ESCALATE_OPERATOR, "unclassified", "escalate")
 

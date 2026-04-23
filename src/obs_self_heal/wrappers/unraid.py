@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import shlex
 
 from obs_self_heal.config import AppConfig
 from obs_self_heal.models import ScriptRunResult, VmState
@@ -13,7 +14,7 @@ _STATE_LINE = re.compile(r"^State:\s+(\S+)", re.MULTILINE)
 def check_vm_state(cfg: AppConfig) -> VmState:
     """`virsh domstate <vm>` on unRAID host."""
 
-    vm = cfg.unraid.vm.name
+    vm = shlex.quote(cfg.unraid.vm.name)
     res = run_remote_command(cfg, f"virsh domstate {vm}", timeout_sec=30.0)
     if res.exit_code != 0:
         return VmState(domain=vm, state=None, error=res.stderr.strip() or res.stdout.strip())
@@ -28,7 +29,7 @@ def restart_obs_vm(cfg: AppConfig) -> ScriptRunResult:
     MVP uses `virsh reset <domain>` — still high impact; must be gated by policy + cooldown.
     """
 
-    vm = cfg.unraid.vm.name
+    vm = shlex.quote(cfg.unraid.vm.name)
     return run_remote_command(cfg, f"virsh reset {vm}", timeout_sec=cfg.unraid.virsh.restart_domain_timeout_sec)
 
 
