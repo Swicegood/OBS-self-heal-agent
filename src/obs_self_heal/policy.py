@@ -142,14 +142,23 @@ def choose_remediation(
         if not cooldowns.allowed(grace_key, float(cd.public_recover_grace)):
             return RemediationPlan(RemediationAction.RECHECK_ONLY, "public_monitoring_lag_grace", "recheck")
 
+        # Prefer capture reset before a controlled restart (often fixes stuck audio/video devices).
+        key = "capture_reset"
+        if cooldowns.allowed(key, float(cd.capture_reset)):
+            return RemediationPlan(
+                RemediationAction.RUN_CAPTURE_DEVICES_RESET,
+                "public_down_but_obs_streaming_waited_grace_try_capture_reset",
+                key,
+            )
+
         key2 = "stream_stop_start"
         if cooldowns.allowed(key2, float(cd.stream_stop_start)):
             return RemediationPlan(
                 RemediationAction.RUN_STOP_THEN_START_STREAM_SCRIPTS,
-                "public_down_but_obs_streaming_waited_grace_try_controlled_restart",
+                "capture_reset_on_cooldown_try_controlled_restart",
                 key2,
             )
-        return RemediationPlan(RemediationAction.RECHECK_ONLY, "cooldown_restart_after_grace", "recheck")
+        return RemediationPlan(RemediationAction.RECHECK_ONLY, "cooldown_capture_and_restart_after_grace", "recheck")
 
     if incident_class == IncidentClass.DEGRADED_SUSPECTED_CAPTURE:
         key = "capture_reset"

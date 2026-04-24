@@ -16,7 +16,7 @@ import urllib.request
 from http.cookiejar import CookieJar
 from pathlib import Path
 
-from obs_self_heal.config import AppConfig
+from obs_self_heal.config import AppConfig, ThrukScopeConfig
 from obs_self_heal.models import PublicStreamHealth
 
 _ROW_RE = re.compile(r"<tr\b[^>]*>.*?</tr>", re.DOTALL | re.IGNORECASE)
@@ -237,6 +237,104 @@ def _count_in_rows(
 def check_public_stream_health_scoped(cfg: AppConfig) -> PublicStreamHealth:
     scope = cfg.thruk.scope
     assert scope is not None and scope.enabled
+    return _check_public_stream_health_scoped(cfg, scope)
+
+
+def _scope_label(scope: ThrukScopeConfig) -> str:
+    hn = scope.host_name.strip() or "?"
+    sn = scope.service_name.strip() or scope.service_substring.strip() or "?"
+    return f"{hn}/{sn}"
+
+
+def check_public_stream_health_scoped_multi(cfg: AppConfig, scopes: list[ThrukScopeConfig]) -> PublicStreamHealth:
+    """Evaluate multiple scoped services and merge into one PublicStreamHealth.
+
+    Merge strategy:
+    - If any scope delegates to OpenClaw, treat as delegated overall and concatenate excerpts.
+    - Otherwise, sum keyword counts; any parse error makes overall unhealthy.
+    """
+
+    if not scopes:
+        return PublicStreamHealth(
+            ok=False,
+            exit_code=1,
+            stdout="",
+            stderr="no_scopes_configured",
+            parse_error="no_scopes_configured",
+            elapsed_sec=0.0,
+        )
+
+    parts: list[PublicStreamHealth] = [_check_public_stream_health_scoped(cfg, s) for s in scopes]
+    elapsed = sum(p.elapsed_sec for p in parts)
+
+    delegated_parts = [p for p in parts if p.public_evaluation_delegated]
+    if delegated_parts:
+        # Concatenate excerpts; keep under the smallest cap we observed.
+        max_c = min(
+            max(1000, int(getattr(s, "openclaw_tac_html_max_chars", 120_000))) for s in scopes if s.delegate_public_to_openclaw
+        )
+        chunks: list[str] = []
+        for s, p in zip(scopes, parts):
+            if not p.tac_html_excerpt:
+                continue
+            chunks.append(f"\n<!-- scope:{_scope_label(s)} -->\n")
+            chunks.append(p.tac_html_excerpt)
+        merged = "".join(chunks)
+        excerpt = merged[:max_c]
+        truncated = len(merged) > max_c or any(p.tac_html_truncated for p in delegated_parts)
+        return PublicStreamHealth(
+            ok=True,
+            exit_code=0,
+            stdout=f"Thruk scoped HTML delegated (scopes={len(scopes)}, excerpt_chars={len(excerpt)}, truncated={truncated})\n",
+            stderr="",
+            critical_count=None,
+            down_count=None,
+            warning_count=None,
+            unreachable_count=None,
+            parse_error=None,
+            elapsed_sec=elapsed,
+            public_evaluation_delegated=True,
+            tac_html_excerpt=excerpt,
+            tac_html_truncated=truncated,
+        )
+
+    # Non-delegated: sum counts; any error -> unhealthy.
+    any_err = next((p for p in parts if p.parse_error or p.exit_code != 0 or not p.ok), None)
+    stdout = "".join([f"[{_scope_label(s)}] {p.stdout}" for s, p in zip(scopes, parts)])
+    stderr = "\n".join([f"[{_scope_label(s)}] {p.stderr}" for s, p in zip(scopes, parts) if p.stderr])
+    if any_err:
+        return PublicStreamHealth(
+            ok=False,
+            exit_code=1,
+            stdout=stdout,
+            stderr=stderr or (any_err.parse_error or "scoped_multi_failed"),
+            critical_count=None,
+            down_count=None,
+            warning_count=None,
+            unreachable_count=None,
+            parse_error=any_err.parse_error or "scoped_multi_failed",
+            elapsed_sec=elapsed,
+        )
+
+    crit = sum((p.critical_count or 0) for p in parts)
+    warn = sum((p.warning_count or 0) for p in parts)
+    down = sum((p.down_count or 0) for p in parts)
+    unr = sum((p.unreachable_count or 0) for p in parts)
+    return PublicStreamHealth(
+        ok=True,
+        exit_code=0,
+        stdout=stdout,
+        stderr=stderr,
+        critical_count=crit,
+        down_count=down,
+        warning_count=warn,
+        unreachable_count=unr,
+        parse_error=None,
+        elapsed_sec=elapsed,
+    )
+
+
+def _check_public_stream_health_scoped(cfg: AppConfig, scope: ThrukScopeConfig) -> PublicStreamHealth:
 
     creds_path = _default_creds_path(cfg)
     start = time.perf_counter()

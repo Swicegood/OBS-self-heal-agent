@@ -32,9 +32,12 @@ def parse_thruk_stdout(stdout: str) -> tuple[int | None, int | None, int | None,
 def check_public_stream_health(cfg: AppConfig) -> PublicStreamHealth:
     """Public / Thruk health: either scoped TAC row parse (in-process) or `thruk_status.py` aggregate."""
 
-    if cfg.thruk.scope is not None and cfg.thruk.scope.enabled:
-        from obs_self_heal.wrappers.thruk_scoped import check_public_stream_health_scoped
+    if any(s.enabled for s in (cfg.thruk.scopes or [])) or (cfg.thruk.scope is not None and cfg.thruk.scope.enabled):
+        from obs_self_heal.wrappers.thruk_scoped import check_public_stream_health_scoped, check_public_stream_health_scoped_multi
 
+        scopes = [s for s in (cfg.thruk.scopes or []) if s.enabled]
+        if scopes:
+            return check_public_stream_health_scoped_multi(cfg, scopes)
         return check_public_stream_health_scoped(cfg)
 
     script = Path(cfg.thruk.script_path).expanduser()

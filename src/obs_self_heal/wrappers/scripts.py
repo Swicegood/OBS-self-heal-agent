@@ -35,7 +35,7 @@ def _run_script(cfg: AppConfig, path: str, name: str) -> ScriptRunResult:
 
 
 def run_capture_devices_reset(cfg: AppConfig) -> ScriptRunResult:
-    return _run_script(cfg, cfg.scripts.capture_devices_reset, "capture_devices_reset")
+    return _run_script(cfg, cfg.scripts.reset_capture, "capture_devices_reset")
 
 
 def run_start_stream_script(cfg: AppConfig) -> ScriptRunResult:

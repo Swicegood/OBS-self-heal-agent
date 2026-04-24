@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 _ENV_PATTERN = re.compile(r"\$\{([^}:]+)(?::-([^}]*))?\}")
@@ -67,7 +67,9 @@ class ThrukConfig(BaseModel):
     down_unhealthy: bool = True
     critical_threshold: int = 1
     warning_only_is_degraded: bool = False
+    # Single-scope (legacy) or multi-scope mode (preferred).
     scope: ThrukScopeConfig | None = None
+    scopes: list[ThrukScopeConfig] = Field(default_factory=list)
     # Timeout for running `thruk_status.py` when scope is disabled.
     script_timeout_sec: float = 30.0
 
@@ -109,7 +111,9 @@ class ReachabilityConfig(BaseModel):
 
 
 class ScriptsConfig(BaseModel):
-    capture_devices_reset: str
+    # Operational script to reset capture graph/devices.
+    # Accept legacy key `capture_devices_reset` for backward compatibility.
+    reset_capture: str = Field(validation_alias=AliasChoices("reset_capture", "capture_devices_reset"))
     start_stream: str
     stop_stream: str
     env: dict[str, str] = Field(default_factory=dict)
