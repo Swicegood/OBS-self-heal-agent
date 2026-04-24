@@ -2,7 +2,7 @@
 # Run from crontab: probe first; on failure either run OPENCLAW_ON_PROBE_FAIL or invoke OpenClaw agent
 # with the named job payload from OPENCLAW_JOBS_JSON (skill line + /skill obs-self-heal).
 #
-#   * * * * * OBS_SELF_HEAL_CONFIG=... OPENCLAW_CRON_JOB_NAME="OBS Check and Heal" ... /path/to/cron-on-probe-fail.sh >>/tmp/obs-probe.log 2>&1
+#   * * * * * OBS_SELF_HEAL_CONFIG="/home/jaga/myopenclaw/configs/local.yaml" OPENCLAW_CRON_JOB_NAME="OBS Check and Heal" OPENCLAW_REPLY_CHANNEL="telegram" OPENCLAW_REPLY_TO="8270383511" OPENCLAW_ON_PROBE_FAIL='/home/jaga/myopenclaw/.venv/bin/obs-self-heal run --config /home/jaga/myopenclaw/configs/local.yaml' "/home/jaga/myopenclaw/skills/obs-self-heal/scripts/cron-on-probe-fail.sh" >>"/tmp/obs-self-heal-probe-cron.log" 2>&1
 #
 # Failure path (first match wins):
 #   1) OPENCLAW_ON_PROBE_FAIL — arbitrary shell command (e.g. direct `obs-self-heal run`).

@@ -31,6 +31,12 @@ When `obs-self-heal probe` fails, the script can invoke **`openclaw agent`** wit
 
 If **`OPENCLAW_ON_PROBE_FAIL`** is set, it runs **instead** (direct remediation without the agent).
 
+Example crontab line:
+
+```bash
+* * * * * OBS_SELF_HEAL_CONFIG="/home/jaga/myopenclaw/configs/local.yaml" OPENCLAW_CRON_JOB_NAME="OBS Check and Heal" OPENCLAW_REPLY_CHANNEL="telegram" OPENCLAW_REPLY_TO="8270383511" OPENCLAW_ON_PROBE_FAIL='/home/jaga/myopenclaw/.venv/bin/obs-self-heal run --config /home/jaga/myopenclaw/configs/local.yaml' "/home/jaga/myopenclaw/skills/obs-self-heal/scripts/cron-on-probe-fail.sh" >>"/tmp/obs-self-heal-probe-cron.log" 2>&1
+```
+
 ## Suggested invocation
 
 From WSL2 (after `pip install -e .` or a venv):
