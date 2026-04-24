@@ -47,6 +47,41 @@ vm_host() {
   ssh -p "$VM_HOST_SSH_PORT" "${VM_HOST_SSH_USER}@${VM_HOST_SSH_HOST}" "$@"
 }
 
+reset_pci_dev() {
+  local dev="$1"
+  vm_host env PCI_DEV="$dev" bash -s <<'SH'
+set -euo pipefail
+dev="${PCI_DEV:?missing PCI_DEV}"
+sys="/sys/bus/pci/devices/$dev"
+if [ ! -d "$sys" ]; then
+  echo "ERROR: PCI device not found: $dev" >&2
+  exit 1
+fi
+
+# Preferred: function-level reset
+if [ -w "$sys/reset" ]; then
+  if echo 1 > "$sys/reset" 2>/dev/null; then
+    exit 0
+  fi
+  echo "WARN: write to $sys/reset failed; attempting fallbacks" >&2
+else
+  echo "WARN: $sys/reset not writable; attempting fallbacks" >&2
+fi
+
+# Fallback: remove + rescan (more disruptive, but forces re-enumeration)
+if [ -w "$sys/remove" ] && [ -w /sys/bus/pci/rescan ]; then
+  echo "INFO: pci remove+rescan for $dev" >&2
+  echo 1 > "$sys/remove"
+  sleep 1
+  echo 1 > /sys/bus/pci/rescan
+  exit 0
+fi
+
+echo "ERROR: unable to reset PCI device $dev (reset/remove-rescan unavailable/failed)" >&2
+exit 1
+SH
+}
+
 obs() {
   docker run --rm jagadguru/obs-cli:latest \
     -H "$OBS_HOST" -P "$OBS_PORT" -p "$OBS_PASS" "$@"
@@ -59,7 +94,7 @@ obs item hide -s "$SCENE" "$AUDIO_ITEM" || true
 sleep 1
 
 echo "2) Reset PCI USB controller ($PCI_DEV)..."
-vm_host sh -lc "echo 1 > '/sys/bus/pci/devices/$PCI_DEV/reset'"
+reset_pci_dev "$PCI_DEV"
 
 # IMPORTANT: let Windows fully re-enumerate the USB bus + DirectShow device
 # This is the main difference from the earlier integrated attempt.
