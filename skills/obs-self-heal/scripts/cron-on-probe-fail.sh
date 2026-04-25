@@ -23,6 +23,9 @@ OPENCLAW_JOBS_JSON="${OPENCLAW_JOBS_JSON:-$HOME/.openclaw/cron/jobs.json}"
 OPENCLAW_AGENT_ID="${OPENCLAW_AGENT_ID:-main}"
 OPENCLAW_REPLY_CHANNEL="${OPENCLAW_REPLY_CHANNEL:-telegram}"
 OPENCLAW_REPLY_TO="${OPENCLAW_REPLY_TO:-}"
+OPENCLAW_THROTTLE_SEC="${OPENCLAW_THROTTLE_SEC:-0}"
+OPENCLAW_THROTTLE_STAMP="${OPENCLAW_THROTTLE_STAMP:-/tmp/obs-self-heal-openclaw-last-run.ts}"
+OPENCLAW_NOTIFY_TOKENS_TO_TELEGRAM="${OPENCLAW_NOTIFY_TOKENS_TO_TELEGRAM:-1}"
 
 if [[ -z "$CONFIG" ]]; then
   echo "cron-on-probe-fail: set OBS_SELF_HEAL_CONFIG to your local.yaml" >&2
@@ -125,6 +128,31 @@ PY
     return 2
   }
 
+  if [[ "$OPENCLAW_NOTIFY_TOKENS_TO_TELEGRAM" == "1" && -n "$OPENCLAW_REPLY_TO" ]]; then
+    # This is a cheap, non-LLM message so we can see token-spending events even if the agent
+    # delivery fails or produces no reply.
+    PATH="$OPENCLAW_NODE_BIN_DIR:$PATH" "$oc" message send \
+      --channel telegram \
+      --target "$OPENCLAW_REPLY_TO" \
+      --message "obs-self-heal: probe failed → invoking OpenClaw agent (${OPENCLAW_AGENT_ID}) for job '${job_name}'" \
+      >/dev/null 2>&1 || true
+  fi
+
+  # Throttle repeated agent invocations while the probe stays failing (prevents invisible token burn).
+  # This only gates the OpenClaw path; the probe itself still runs every cron tick.
+  if [[ -n "$OPENCLAW_THROTTLE_SEC" && "$OPENCLAW_THROTTLE_SEC" != "0" ]]; then
+    now="$(date +%s)"
+    last="0"
+    if [[ -f "$OPENCLAW_THROTTLE_STAMP" ]]; then
+      last="$(cat "$OPENCLAW_THROTTLE_STAMP" 2>/dev/null || echo 0)"
+    fi
+    if [[ "$last" =~ ^[0-9]+$ ]] && (( now - last < OPENCLAW_THROTTLE_SEC )); then
+      echo "cron-on-probe-fail: openclaw throttled (last=$last now=$now throttle_sec=$OPENCLAW_THROTTLE_SEC)" >&2
+      return 0
+    fi
+  fi
+
+  echo "$(date -Is) cron-on-probe-fail: invoking openclaw agent job='${job_name}' agent='${OPENCLAW_AGENT_ID}'" >&2
   # Prefix triggers skill activation in OpenClaw; payload holds the scheduled instructions.
   if [[ -n "$OPENCLAW_REPLY_TO" ]]; then
     PATH="$OPENCLAW_NODE_BIN_DIR:$PATH" "$oc" agent \
@@ -136,6 +164,11 @@ PY
     PATH="$OPENCLAW_NODE_BIN_DIR:$PATH" "$oc" agent \
       --agent "$OPENCLAW_AGENT_ID" \
       --message $'/skill obs-self-heal\n\n'"$payload"
+  fi
+
+  # Record last successful attempt to invoke the agent (regardless of the agent's internal outcome).
+  if [[ -n "$OPENCLAW_THROTTLE_SEC" && "$OPENCLAW_THROTTLE_SEC" != "0" ]]; then
+    date +%s >"$OPENCLAW_THROTTLE_STAMP" 2>/dev/null || true
   fi
 }
 
