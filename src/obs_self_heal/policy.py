@@ -49,6 +49,7 @@ def classify_incident(
         "public_evaluation_delegated": public.public_evaluation_delegated,
         "critical_count": public.critical_count,
         "down_count": public.down_count,
+        "unreachable_count": public.unreachable_count,
         "ws_reachable": ws_reachable,
         "stream_active": stream.output_active,
         "stream_error": stream.error,
@@ -58,10 +59,21 @@ def classify_incident(
 
     public_ok = public.is_public_healthy(cfg.thruk.critical_threshold, cfg.thruk.down_unhealthy)
     degraded = public.is_degraded(cfg.thruk.warning_only_is_degraded)
+    unreachable_only = public.is_public_unreachable_only(cfg.thruk.critical_threshold)
     overall_public_bad = (not public_ok) or degraded
 
     vm_ok = _vm_network_ok(obs_vm)
     ws_ok = ws_reachable and stream.error is None
+
+    # Thruk UNREACHABLE (checker cannot reach host) — distinct from DOWN/CRITICAL and from OBS websocket down.
+    if unreachable_only and vm_ok:
+        if not ws_reachable:
+            return ClassificationResult(IncidentClass.OBS_WEBSOCKET_UNREACHABLE_VM_REACHABLE, evidence)
+        if stream.output_active is True:
+            return ClassificationResult(IncidentClass.PUBLIC_UNREACHABLE_OBS_REACHABLE_STREAM_ACTIVE, evidence)
+        if stream.output_active is False:
+            return ClassificationResult(IncidentClass.PUBLIC_UNREACHABLE_OBS_REACHABLE_STREAM_INACTIVE, evidence)
+        return ClassificationResult(IncidentClass.PUBLIC_UNREACHABLE_OBS_REACHABLE_STREAM_ACTIVE, evidence)
 
     if not overall_public_bad:
         if ws_ok and stream.output_active is not False:
@@ -136,13 +148,36 @@ def choose_remediation(
             return RemediationPlan(action, "public_down_and_obs_not_streaming", key)
         return RemediationPlan(RemediationAction.RECHECK_ONLY, "cooldown_obs_start_stream", "recheck")
 
+    if incident_class == IncidentClass.PUBLIC_UNREACHABLE_OBS_REACHABLE_STREAM_INACTIVE:
+        # Checker UNREACHABLE and OBS not streaming — start stream (no capture device reset).
+        key = "obs_start_stream"
+        cool = float(cd.obs_start_stream)
+        action = (
+            RemediationAction.RUN_START_STREAM_SCRIPT
+            if cfg.policy.prefer_script_for_stream_toggle
+            else RemediationAction.OBS_START_STREAM_WEBSOCKET
+        )
+        if cooldowns.allowed(key, cool):
+            return RemediationPlan(action, "public_unreachable_and_obs_not_streaming", key)
+        return RemediationPlan(RemediationAction.RECHECK_ONLY, "cooldown_obs_start_stream_unreachable", "recheck")
+
+    if incident_class == IncidentClass.PUBLIC_UNREACHABLE_OBS_REACHABLE_STREAM_ACTIVE:
+        # Monitoring host UNREACHABLE while OBS streams — not a capture/device fault.
+        grace_key = "public_recover_grace"
+        if not cooldowns.allowed(grace_key, float(cd.public_recover_grace)):
+            return RemediationPlan(RemediationAction.RECHECK_ONLY, "public_unreachable_monitoring_grace", "recheck")
+        return RemediationPlan(
+            RemediationAction.RECHECK_ONLY,
+            "public_unreachable_obs_streaming_recheck_monitoring",
+            "recheck",
+        )
+
     if incident_class == IncidentClass.PUBLIC_DOWN_OBS_REACHABLE_STREAM_ACTIVE:
         # Public monitoring can lag substantially after OBS reports streaming active.
         grace_key = "public_recover_grace"
         if not cooldowns.allowed(grace_key, float(cd.public_recover_grace)):
             return RemediationPlan(RemediationAction.RECHECK_ONLY, "public_monitoring_lag_grace", "recheck")
 
-        # Prefer capture reset before a controlled restart (often fixes stuck audio/video devices).
         key = "capture_reset"
         if cooldowns.allowed(key, float(cd.capture_reset)):
             return RemediationPlan(
@@ -178,25 +213,34 @@ def choose_remediation(
         return RemediationPlan(RemediationAction.RECHECK_ONLY, "cooldown_capture_and_restart", "recheck")
 
     if incident_class == IncidentClass.OBS_WEBSOCKET_UNREACHABLE_VM_REACHABLE:
+        key_retry = "obs_websocket_retry"
+        if cooldowns.allowed(key_retry, float(cd.obs_websocket_retry)):
+            return RemediationPlan(
+                RemediationAction.RECHECK_ONLY,
+                "ws_unreachable_retry_connection",
+                key_retry,
+            )
+
         key_api = "obs_control_api_restart"
         if cfg.obs_control_api is not None:
-            # Prefer the Windows-host control API when websocket is down; script-based toggles typically
-            # also depend on websocket and can hang/thrash when OBS isn't running.
+            # Restart obs64.exe via Windows control API (POST /obs/restart), not websocket stream toggle.
             if cooldowns.allowed(key_api, float(cd.obs_control_api_restart)):
                 return RemediationPlan(
                     RemediationAction.RESTART_OBS_VIA_CONTROL_API,
-                    "ws_unreachable_try_windows_side_control_api",
+                    "ws_unreachable_restart_obs_process_via_control_api",
                     key_api,
                 )
-            return RemediationPlan(RemediationAction.RECHECK_ONLY, "cooldown_obs_control_api_restart", "recheck")
-        key = "stream_stop_start"
-        if cooldowns.allowed(key, float(cd.stream_stop_start)):
             return RemediationPlan(
-                RemediationAction.RUN_STOP_THEN_START_STREAM_SCRIPTS,
-                "ws_unreachable_try_script_based_obs_cli",
-                key,
+                RemediationAction.ESCALATE_OPERATOR,
+                "ws_unreachable_obs_control_api_restart_on_cooldown",
+                "escalate",
             )
-        return RemediationPlan(RemediationAction.ESCALATE_OPERATOR, "cooldown_control_api_and_stream_toggle", "escalate")
+
+        return RemediationPlan(
+            RemediationAction.ESCALATE_OPERATOR,
+            "ws_unreachable_obs_control_api_not_configured",
+            "escalate",
+        )
 
     if incident_class == IncidentClass.VM_OR_NETWORK_UNHEALTHY:
         key = "vm_restart"

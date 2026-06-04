@@ -22,8 +22,14 @@ from obs_self_heal.models import PublicStreamHealth
 _ROW_RE = re.compile(r"<tr\b[^>]*>.*?</tr>", re.DOTALL | re.IGNORECASE)
 _SCRIPT_STYLE_RE = re.compile(r"(?is)<script[^>]*>.*?</script>|<style[^>]*>.*?</style>")
 _TAG_RE = re.compile(r"<[^>]+>")
-_SERVICE_STATUS_RE = re.compile(r"\b(OK|WARNING|CRITICAL|UNKNOWN)\b", re.IGNORECASE)
-_CURRENT_STATUS_RE = re.compile(r"current\s+status\s*[:\-]?\s*(OK|WARNING|CRITICAL|UNKNOWN)", re.IGNORECASE)
+_SERVICE_STATUS_RE = re.compile(
+    r"\b(OK|WARNING|CRITICAL|UNKNOWN|UNREACHABLE|DOWN)\b",
+    re.IGNORECASE,
+)
+_CURRENT_STATUS_RE = re.compile(
+    r"current\s+status\s*[:\-]?\s*(OK|WARNING|CRITICAL|UNKNOWN|UNREACHABLE|DOWN)",
+    re.IGNORECASE,
+)
 _NOT_FOUND_RE = re.compile(r"\b(no such host|no such service|not found|does not exist)\b", re.IGNORECASE)
 
 
@@ -85,15 +91,17 @@ def _service_health_from_status(status: str, *, stdout: str, elapsed: float) -> 
     s = status.upper()
     crit = 1 if s in ("CRITICAL", "UNKNOWN") else 0
     warn = 1 if s == "WARNING" else 0
+    down = 1 if s == "DOWN" else 0
+    unr = 1 if s == "UNREACHABLE" else 0
     return PublicStreamHealth(
         ok=True,
         exit_code=0,
         stdout=stdout,
         stderr="",
         critical_count=crit,
-        down_count=0,
+        down_count=down,
         warning_count=warn,
-        unreachable_count=0,
+        unreachable_count=unr,
         parse_error=None,
         elapsed_sec=elapsed,
     )
@@ -425,6 +433,36 @@ def _check_public_stream_health_scoped(cfg: AppConfig, scope: ThrukScopeConfig) 
                         if err2 is None and st2:
                             summary = f"service_state (status.cgi): {scope.host_name!r}/{scope.service_name!r} -> {st2}\n"
                             return _service_health_from_status(st2, stdout=summary, elapsed=elapsed)
+                # Final fallback: if this scope also has TAC-row heuristics configured, try that
+                # before reporting a parse/not-found error. This helps when exact OMD object names
+                # drift (spaces/punctuation) but the service is still visible on TAC.
+                if scope.service_substring.strip() and any(h.strip() for h in scope.host_substrings):
+                    tac_url = f"{base}/thruk/cgi-bin/tac.cgi"
+                    code_t, html_t = _fetch(opener, tac_url, timeout_sec=timeout_sec)
+                    if code_t == 200:
+                        crit, warn, down, unr, perr2 = count_scoped_status_keywords(
+                            html_t,
+                            scope.service_substring,
+                            scope.host_substrings,
+                            scope.proximity_window_chars,
+                        )
+                        if perr2 is None:
+                            summary = (
+                                f"keyword hits (scoped fallback): CRITICAL={crit} WARNING={warn} DOWN={down} "
+                                f"UNREACHABLE={unr} service={scope.service_substring!r}\n"
+                            )
+                            return PublicStreamHealth(
+                                ok=True,
+                                exit_code=0,
+                                stdout=summary,
+                                stderr="",
+                                critical_count=crit,
+                                down_count=down,
+                                warning_count=warn,
+                                unreachable_count=unr,
+                                parse_error=None,
+                                elapsed_sec=elapsed,
+                            )
                 return PublicStreamHealth(
                     ok=False,
                     exit_code=1,

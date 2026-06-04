@@ -11,6 +11,8 @@ class IncidentClass(str, Enum):
     """High-level incident classification for policy."""
 
     HEALTHY = "healthy"
+    PUBLIC_UNREACHABLE_OBS_REACHABLE_STREAM_INACTIVE = "public_unreachable_obs_reachable_stream_inactive"
+    PUBLIC_UNREACHABLE_OBS_REACHABLE_STREAM_ACTIVE = "public_unreachable_obs_reachable_stream_active"
     PUBLIC_DOWN_OBS_REACHABLE_STREAM_INACTIVE = "public_down_obs_reachable_stream_inactive"
     PUBLIC_DOWN_OBS_REACHABLE_STREAM_ACTIVE = "public_down_obs_reachable_stream_active"
     DEGRADED_SUSPECTED_CAPTURE = "degraded_suspected_capture"
@@ -64,6 +66,18 @@ class PublicStreamHealth:
         if treat_down_as_unhealthy and (self.down_count or 0) > 0:
             return False
         return True
+
+    def is_public_unreachable_only(self, critical_threshold: int) -> bool:
+        """True when the only public signal is UNREACHABLE (no DOWN/CRITICAL)."""
+        if self.public_evaluation_delegated:
+            return False
+        if self.exit_code != 0 or self.parse_error:
+            return False
+        if (self.down_count or 0) > 0:
+            return False
+        if self.critical_count is not None and self.critical_count >= critical_threshold:
+            return False
+        return (self.unreachable_count or 0) > 0
 
     def is_degraded(self, warning_only_is_degraded: bool) -> bool:
         if self.public_evaluation_delegated:

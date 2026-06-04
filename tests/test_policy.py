@@ -109,6 +109,51 @@ def test_public_down_stream_inactive() -> None:
     assert r.incident_class == IncidentClass.PUBLIC_DOWN_OBS_REACHABLE_STREAM_INACTIVE
 
 
+def test_classify_public_unreachable_stream_active() -> None:
+    cfg = _minimal_cfg()
+    pub = PublicStreamHealth(
+        ok=True,
+        exit_code=0,
+        stdout="service_state: UNREACHABLE",
+        stderr="",
+        critical_count=0,
+        down_count=0,
+        unreachable_count=1,
+    )
+    r = classify_incident(
+        cfg,
+        pub,
+        True,
+        ObsStreamState(output_active=True),
+        ReachabilityResult(host="h", ping_ok=True, tcp_ok={4455: True}),
+        None,
+    )
+    assert r.incident_class == IncidentClass.PUBLIC_UNREACHABLE_OBS_REACHABLE_STREAM_ACTIVE
+    assert r.evidence.get("unreachable_count") == 1
+
+
+def test_classify_public_unreachable_stream_inactive() -> None:
+    cfg = _minimal_cfg()
+    pub = PublicStreamHealth(
+        ok=True,
+        exit_code=0,
+        stdout="service_state: UNREACHABLE",
+        stderr="",
+        critical_count=0,
+        down_count=0,
+        unreachable_count=1,
+    )
+    r = classify_incident(
+        cfg,
+        pub,
+        True,
+        ObsStreamState(output_active=False),
+        ReachabilityResult(host="h", ping_ok=True, tcp_ok={4455: True}),
+        None,
+    )
+    assert r.incident_class == IncidentClass.PUBLIC_UNREACHABLE_OBS_REACHABLE_STREAM_INACTIVE
+
+
 def test_public_down_stream_active() -> None:
     cfg = _minimal_cfg()
     pub = PublicStreamHealth(
@@ -151,6 +196,37 @@ def test_ws_unreachable_vm_ok() -> None:
     assert r.incident_class == IncidentClass.OBS_WEBSOCKET_UNREACHABLE_VM_REACHABLE
 
 
+def test_choose_remediation_public_unreachable_inactive_starts_stream(tmp_path: Path) -> None:
+    cfg = _minimal_cfg()
+    store = CooldownStore(tmp_path / "cd_public_unr_inactive.json")
+    plan = choose_remediation(
+        cfg,
+        IncidentClass.PUBLIC_UNREACHABLE_OBS_REACHABLE_STREAM_INACTIVE,
+        store,
+    )
+    assert plan.action == RemediationAction.OBS_START_STREAM_WEBSOCKET
+    assert plan.action != RemediationAction.RUN_CAPTURE_DEVICES_RESET
+
+
+def test_choose_remediation_public_unreachable_active_recheck_only(tmp_path: Path) -> None:
+    cfg = _minimal_cfg()
+    store = CooldownStore(tmp_path / "cd_public_unr_active.json")
+    plan = choose_remediation(
+        cfg,
+        IncidentClass.PUBLIC_UNREACHABLE_OBS_REACHABLE_STREAM_ACTIVE,
+        store,
+    )
+    assert plan.action == RemediationAction.RECHECK_ONLY
+    assert plan.action != RemediationAction.RUN_CAPTURE_DEVICES_RESET
+
+
+def test_choose_remediation_public_down_stream_active_capture_reset_after_grace(tmp_path: Path) -> None:
+    cfg = _minimal_cfg()
+    store = CooldownStore(tmp_path / "cd_public_active.json")
+    plan = choose_remediation(cfg, IncidentClass.PUBLIC_DOWN_OBS_REACHABLE_STREAM_ACTIVE, store)
+    assert plan.action == RemediationAction.RUN_CAPTURE_DEVICES_RESET
+
+
 def test_choose_remediation_stream_inactive(tmp_path: Path) -> None:
     cfg = _minimal_cfg()
     store = CooldownStore(tmp_path / "cd.json")
@@ -165,9 +241,28 @@ def test_choose_remediation_vm_bad_no_restart(tmp_path: Path) -> None:
     assert plan.action == RemediationAction.ESCALATE_OPERATOR
 
 
-def test_choose_remediation_ws_unreachable_prefers_control_api_when_configured(tmp_path: Path) -> None:
+def test_choose_remediation_ws_unreachable_retries_before_api(tmp_path: Path) -> None:
     cfg = _minimal_cfg()
     cfg.obs_control_api = ObsControlApiConfig(base_url="http://10.0.0.9:8765", api_token="t")
     store = CooldownStore(tmp_path / "cd3.json")
     plan = choose_remediation(cfg, IncidentClass.OBS_WEBSOCKET_UNREACHABLE_VM_REACHABLE, store)
+    assert plan.action == RemediationAction.RECHECK_ONLY
+    assert plan.cooldown_key == "obs_websocket_retry"
+
+
+def test_choose_remediation_ws_unreachable_api_restart_after_retry(tmp_path: Path) -> None:
+    cfg = _minimal_cfg()
+    cfg.obs_control_api = ObsControlApiConfig(base_url="http://10.0.0.9:8765", api_token="t")
+    store = CooldownStore(tmp_path / "cd3b.json")
+    store.touch("obs_websocket_retry")
+    plan = choose_remediation(cfg, IncidentClass.OBS_WEBSOCKET_UNREACHABLE_VM_REACHABLE, store)
     assert plan.action == RemediationAction.RESTART_OBS_VIA_CONTROL_API
+
+
+def test_choose_remediation_ws_unreachable_no_stream_toggle_without_api(tmp_path: Path) -> None:
+    cfg = _minimal_cfg()
+    store = CooldownStore(tmp_path / "cd3c.json")
+    store.touch("obs_websocket_retry")
+    plan = choose_remediation(cfg, IncidentClass.OBS_WEBSOCKET_UNREACHABLE_VM_REACHABLE, store)
+    assert plan.action == RemediationAction.ESCALATE_OPERATOR
+    assert plan.action != RemediationAction.RUN_STOP_THEN_START_STREAM_SCRIPTS

@@ -105,6 +105,12 @@ def run_cycle(
         LOG.warning("max_actions_per_incident_reached", limit=cfg.policy.max_actions_per_incident)
     else:
         exec_result = execute_remediation(cfg, ctx, plan.action, cooldowns, dry_run=dry)
+        if (
+            not dry
+            and plan.action == RemediationAction.RECHECK_ONLY
+            and plan.cooldown_key == "obs_websocket_retry"
+        ):
+            cooldowns.touch("obs_websocket_retry")
 
     verify: dict[str, Any] = {}
     if classification.incident_class.value != "healthy" and plan.action != RemediationAction.NONE:
