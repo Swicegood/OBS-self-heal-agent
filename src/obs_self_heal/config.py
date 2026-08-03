@@ -153,6 +153,10 @@ class PolicyCooldownConfig(BaseModel):
     public_recover_grace: int = 600
     obs_control_api_restart: int = 180
     vm_restart: int = 900
+    # Sticky ladder progress: remembers capture/stop-start/API already tried so a slow
+    # probe cadence (e.g. 5 min) cannot fall back to repeating capture forever.
+    # Must be longer than the probe interval.
+    stream_side_ladder: int = 1800
 
 
 class PolicyConfig(BaseModel):
@@ -170,6 +174,21 @@ class LoggingConfig(BaseModel):
     json_format: bool = Field(True, alias="json")
 
 
+class UplinkConfig(BaseModel):
+    """Gate cron/self-heal when egress is not on the primary WAN (e.g. AT&T failover)."""
+
+    # When true, cron-on-probe-fail skips OpenClaw/heal unless public egress matches primary.
+    require_primary_egress: bool = False
+    # Exact IPv4 addresses that count as primary WAN egress.
+    primary_egress_ips: list[str] = Field(default_factory=list)
+    # Optional regex (fullmatch) alternative/addition to primary_egress_ips.
+    primary_egress_regex: str = ""
+    check_url: str = "https://ifconfig.me/ip"
+    timeout_sec: float = 3.0
+    # If check-ip fails/times out: skip heal (true) or proceed (false).
+    skip_on_check_failure: bool = True
+
+
 class AppConfig(BaseModel):
     maintenance_mode: bool = False
     dry_run_default: bool = False
@@ -184,6 +203,7 @@ class AppConfig(BaseModel):
     unraid: UnraidConfig
     policy: PolicyConfig = Field(default_factory=PolicyConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    uplink: UplinkConfig = Field(default_factory=UplinkConfig)
 
     model_config = {"extra": "ignore"}
 

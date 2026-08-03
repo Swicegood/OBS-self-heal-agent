@@ -227,6 +227,65 @@ def test_choose_remediation_public_down_stream_active_capture_reset_after_grace(
     assert plan.action == RemediationAction.RUN_CAPTURE_DEVICES_RESET
 
 
+def test_choose_remediation_public_down_stream_active_advances_past_cooled_capture(tmp_path: Path) -> None:
+    """After capture was tried, do not retry it when short cooldown expires — advance ladder."""
+    cfg = _minimal_cfg()
+    cfg.policy.allow_vm_restart = True
+    store = CooldownStore(tmp_path / "cd_ladder_advance.json")
+    store.touch("ladder_capture_done")
+    # Short capture cooldown already expired (not present) — still must not redo capture.
+    plan = choose_remediation(cfg, IncidentClass.PUBLIC_DOWN_OBS_REACHABLE_STREAM_ACTIVE, store)
+    assert plan.action == RemediationAction.RUN_STOP_THEN_START_STREAM_SCRIPTS
+
+
+def test_choose_remediation_public_down_stream_active_escalates_to_vm(tmp_path: Path) -> None:
+    """After capture + stop/start ladder steps, escalate even if short cooldowns expired."""
+    cfg = _minimal_cfg()
+    cfg.policy.allow_vm_restart = True
+    store = CooldownStore(tmp_path / "cd_public_active_escalate.json")
+    store.touch("ladder_capture_done")
+    store.touch("ladder_stop_start_done")
+    plan = choose_remediation(cfg, IncidentClass.PUBLIC_DOWN_OBS_REACHABLE_STREAM_ACTIVE, store)
+    assert plan.action == RemediationAction.RESTART_OBS_VM
+    assert "vm_restart" in plan.reason
+
+
+def test_choose_remediation_public_down_stream_active_escalates_to_obs_api_first(tmp_path: Path) -> None:
+    cfg = _minimal_cfg()
+    cfg.policy.allow_vm_restart = True
+    cfg.obs_control_api = ObsControlApiConfig(base_url="http://10.0.0.9:8765", api_token="t")
+    store = CooldownStore(tmp_path / "cd_public_active_api.json")
+    store.touch("ladder_capture_done")
+    store.touch("ladder_stop_start_done")
+    plan = choose_remediation(cfg, IncidentClass.PUBLIC_DOWN_OBS_REACHABLE_STREAM_ACTIVE, store)
+    assert plan.action == RemediationAction.RESTART_OBS_VIA_CONTROL_API
+
+
+def test_choose_remediation_public_down_stream_active_vm_after_api_ladder_step(tmp_path: Path) -> None:
+    """API sticky progress must prevent re-trying API forever across slow probes."""
+    cfg = _minimal_cfg()
+    cfg.policy.allow_vm_restart = True
+    cfg.obs_control_api = ObsControlApiConfig(base_url="http://10.0.0.9:8765", api_token="t")
+    store = CooldownStore(tmp_path / "cd_public_active_api_then_vm.json")
+    store.touch("ladder_capture_done")
+    store.touch("ladder_stop_start_done")
+    store.touch("ladder_obs_api_done")
+    plan = choose_remediation(cfg, IncidentClass.PUBLIC_DOWN_OBS_REACHABLE_STREAM_ACTIVE, store)
+    assert plan.action == RemediationAction.RESTART_OBS_VM
+
+
+def test_choose_remediation_public_down_stream_active_escalates_operator_when_vm_disabled(
+    tmp_path: Path,
+) -> None:
+    cfg = _minimal_cfg()
+    store = CooldownStore(tmp_path / "cd_public_active_op.json")
+    store.touch("ladder_capture_done")
+    store.touch("ladder_stop_start_done")
+    plan = choose_remediation(cfg, IncidentClass.PUBLIC_DOWN_OBS_REACHABLE_STREAM_ACTIVE, store)
+    assert plan.action == RemediationAction.ESCALATE_OPERATOR
+    assert plan.action != RemediationAction.RECHECK_ONLY
+
+
 def test_choose_remediation_stream_inactive(tmp_path: Path) -> None:
     cfg = _minimal_cfg()
     store = CooldownStore(tmp_path / "cd.json")

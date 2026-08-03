@@ -43,5 +43,14 @@ class CooldownStore:
         self._data[key] = now if now is not None else time.time()
         self._save()
 
+    def clear(self, *keys: str) -> None:
+        changed = False
+        for key in keys:
+            if key in self._data:
+                del self._data[key]
+                changed = True
+        if changed:
+            self._save()
+
     def snapshot(self) -> dict[str, Any]:
         return dict(self._data)

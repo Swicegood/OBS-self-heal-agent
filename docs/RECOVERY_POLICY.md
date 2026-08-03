@@ -9,8 +9,10 @@
 5. **`run_capture_devices_reset()`** when capture/source failure is suspected (F2 / F5 — not F6 / F7 public UNREACHABLE).
    F6 (`public_unreachable` + stream inactive) uses stream start only, same ladder as F1 without capture reset.
 6. **Controlled stream restart**: `run_stop_stream_script()` → wait → `run_start_stream_script()` and/or OBS API equivalents per config.
-7. **F3: Windows-side OBS Control API** — `POST /obs/restart` to restart the OBS process when WebSocket is unreachable (not websocket/script stream toggle).
-8. **`restart_obs_vm()`** via SSH to unRAID + `virsh` — only after cooldowns and max lower-impact attempts.
+   Wrapper success alone is not enough: if OBS `output_active` is still false afterward, the action is treated as failed and does **not** open the public-recover grace window.
+7. **OBS Control API** — `POST /obs/restart` when lower stream-side actions are exhausted (or WebSocket unreachable — F3).
+8. **`restart_obs_vm()`** via SSH to unRAID + `virsh` — after control API (or when API is not configured) and lower-impact attempts are exhausted.
+   Progress is tracked with **sticky ladder keys** (`stream_side_ladder`, default 1800s) so a slow probe cadence (~5 min) cannot miss short action cooldowns and loop on capture forever.
 9. Escalate to operator with full structured log.
 
 ## Cooldowns and limits

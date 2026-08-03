@@ -24,6 +24,10 @@ Restart the OpenClaw gateway after changing config. Prefer editing **`~/myopencl
 
 ## Cron (`cron-on-probe-fail.sh`) → OpenClaw agent
 
+Probe first; on failure invoke OpenClaw (or `OPENCLAW_ON_PROBE_FAIL`).
+
+**Uplink gate:** if `uplink.require_primary_egress` is true in `configs/local.yaml`, the script checks public egress IP (`check_url`, default ifconfig.me) and **exits before heal/Telegram** when the IP is not in `primary_egress_ips` / `primary_egress_regex` (backup AT&T failover). Update the IP list when primary WAN changes.
+
 When `obs-self-heal probe` fails, the script can invoke **`openclaw agent`** with **`/skill obs-self-heal`** plus the **`payload.text`** for a named job in **`~/.openclaw/cron/jobs.json`**:
 
 - Set **`OPENCLAW_CRON_JOB_NAME`** (e.g. `OBS Check and Heal`) on the cron line.

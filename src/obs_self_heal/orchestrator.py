@@ -18,6 +18,7 @@ from obs_self_heal.models import (
 from obs_self_heal.policy import (
     choose_remediation,
     classify_incident,
+    clear_stream_side_ladder,
     execute_remediation,
     verify_recovery,
 )
@@ -86,6 +87,9 @@ def run_cycle(
     )
 
     plan = choose_remediation(cfg, classification.incident_class, cooldowns)
+
+    if classification.incident_class.value == "healthy" and not dry:
+        clear_stream_side_ladder(cooldowns)
 
     LOG.info(
         "incident_classified",

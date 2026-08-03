@@ -29,6 +29,10 @@ OpenClaw does **not** embed inside `obs-self-heal`; it **calls** it as a tool an
 3. **Read the JSON** printed to stdout (classification, plan, execution, verify). Summarize for the user: incident class, action taken or skipped, whether verification showed improvement.
 4. **LLM judgment** applies to: whether to run at all, whether to escalate to a human, whether maintenance mode might be set, and whether to combine with other skills (e.g. `lan-monitoring` / browser Thruk).
 
+## Uplink / backup WAN gate
+
+`skills/obs-self-heal/scripts/cron-on-probe-fail.sh` checks public egress IP (`uplink` in `configs/local.yaml`) **before** probe-fail remediation. If `require_primary_egress` is true and the IP is not in `primary_egress_ips` (or does not match `primary_egress_regex`), the script exits quietly — no OpenClaw agent, no Telegram, no self-heal. Update the IP list when primary WAN DHCP changes.
+
 ## Local OpenAI-compatible model (OpenClaw)
 
 This skill assumes the **OpenClaw agent** can be configured to use an OpenAI-compatible endpoint.
